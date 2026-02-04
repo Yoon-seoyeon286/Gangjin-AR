@@ -2,14 +2,14 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# ar-engine 디렉토리로 이동
-COPY ar-engine/package.json ./
+# 패키지 파일 먼저 복사 (캐싱 최적화)
+COPY ar-engine/package*.json ./
 
 # npm install 실행
 RUN npm install --include=dev
 
-# 소스 복사
-COPY ar-engine/ ./
+# 전체 소스 복사
+COPY ar-engine ./
 
 # webpack 빌드
 RUN npm run build
