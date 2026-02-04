@@ -2,10 +2,10 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# 패키지 파일 복사
-COPY package.json ./
+# 패키지 파일 복사 (package-lock.json 포함)
+COPY package*.json ./
 
-# npm install 실행 (package-lock.json 생성 포함)
+# npm install 실행
 RUN npm install --include=dev
 
 # 소스 복사
