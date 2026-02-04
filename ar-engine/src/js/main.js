@@ -523,8 +523,8 @@ class ARApp {
         this.hudVideo.setAttribute('webkit-playsinline', '');
         this.hudVideo.crossOrigin = 'anonymous';
         
-        // 버퍼링 최적화 설정
-        this.hudVideo.preload = 'auto';  // 'metadata' → 'auto'로 변경
+        // 버퍼링 최적화 설정 - 즉시 재생 우선
+        this.hudVideo.preload = 'auto';
         this.hudVideo.autoplay = false;
         
         this.hudVideo.src = this.currentVideoSrc;
@@ -536,20 +536,28 @@ class ARApp {
             this.showNotification('2번째는 음악이 나옵니다', 3000);
         }
 
-        // 비디오 재생 시도 (버퍼링 대기 후)
+        // 비디오 로드 시작
+        this.hudVideo.load();
+        
+        // 즉시 재생 시도 (여러 이벤트에서 시도)
         const tryPlay = () => {
-            console.log('[AR] 비디오 준비됨, 재생 시작');
+            console.log('[AR] 비디오 재생 시도');
             this.hudVideo.play().catch(e => {
-                console.warn('[AR] 영상 자동재생 실패, 재시도:', e.message);
-                // 1초 후 재시도
-                setTimeout(() => {
-                    this.hudVideo.play().catch(() => {});
-                }, 1000);
+                console.warn('[AR] 재생 실패:', e.message);
             });
         };
         
-        // canplaythrough: 충분히 버퍼링되어 끊김 없이 재생 가능
-        this.hudVideo.addEventListener('canplaythrough', tryPlay, { once: true });
+        // loadeddata: 첫 프레임 로드 완료 시 즉시 재생
+        this.hudVideo.addEventListener('loadeddata', () => {
+            console.log('[AR] 첫 프레임 로드 완료, 즉시 재생');
+            tryPlay();
+        }, { once: true });
+        
+        // canplay: 재생 가능 상태
+        this.hudVideo.addEventListener('canplay', () => {
+            console.log('[AR] 재생 가능 상태');
+            tryPlay();
+        }, { once: true });
         
         // 버퍼링 이벤트 모니터링
         this.hudVideo.addEventListener('waiting', () => {
@@ -558,8 +566,6 @@ class ARApp {
         this.hudVideo.addEventListener('playing', () => {
             console.log('[AR] 비디오 재생 중');
         });
-        
-        this.hudVideo.load();
 
         // VideoTexture 생성
         this.hudVideoTexture = new THREE.VideoTexture(this.hudVideo);
@@ -927,17 +933,18 @@ class ARApp {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(0, 0, 0, 0.95);
             color: #fff;
-            padding: 20px 40px;
-            border-radius: 12px;
-            font-size: 20px;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
             font-weight: bold;
             z-index: 10000;
             pointer-events: none;
             text-align: center;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
             animation: fadeInOut 3s ease-in-out;
+            white-space: nowrap;
         `;
 
         // CSS 애니메이션 추가
@@ -946,10 +953,10 @@ class ARApp {
             style.id = 'ar-notification-style';
             style.textContent = `
                 @keyframes fadeInOut {
-                    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
                     10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
                     90% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
                 }
             `;
             document.head.appendChild(style);
