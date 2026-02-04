@@ -516,13 +516,20 @@ class ARApp {
         // 비디오 엘리먼트 생성
         this.hudVideo = document.createElement('video');
         this.hudVideo.loop = true;
-        this.hudVideo.muted = true;
+        // 2번 영상(singgang2.mp4)만 사운드 재생
+        this.hudVideo.muted = !this.currentVideoSrc.includes('singgang2');
         this.hudVideo.playsInline = true;
         this.hudVideo.setAttribute('playsinline', '');
         this.hudVideo.setAttribute('webkit-playsinline', '');
         this.hudVideo.crossOrigin = 'anonymous';
         this.hudVideo.preload = 'metadata';
         this.hudVideo.src = this.currentVideoSrc;
+        
+        // 사운드가 있는 영상의 경우 볼륨 설정
+        if (!this.hudVideo.muted) {
+            this.hudVideo.volume = 0.8;
+            console.log('[AR] 사운드 활성화 (볼륨: 80%)');
+        }
 
         // 비디오 재생 시도 (canplay 이벤트 + 직접 호출)
         const tryPlay = () => {
@@ -543,13 +550,15 @@ class ARApp {
         this.hudVideoTexture.minFilter = THREE.LinearFilter;
         this.hudVideoTexture.magFilter = THREE.LinearFilter;
 
-        // 크로마키 제거 셰이더 머티리얼
+        // 크로마키 제거 + 검은 줄 크롭 셰이더 머티리얼
         const material = new THREE.ShaderMaterial({
             uniforms: {
                 videoTexture: { value: this.hudVideoTexture },
                 keyColor: { value: new THREE.Color(0.0, 1.0, 0.0) }, // 초록
                 similarity: { value: 0.4 },  // 색상 허용 범위
                 smoothness: { value: 0.1 },  // 경계 부드러움
+                cropTop: { value: 0.0 },     // 상단 크롭 비율 (기본값)
+                cropBottom: { value: 0.0 },  // 하단 크롭 비율 (기본값)
             },
             vertexShader: `
                 varying vec2 vUv;
@@ -563,6 +572,8 @@ class ARApp {
                 uniform vec3 keyColor;
                 uniform float similarity;
                 uniform float smoothness;
+                uniform float cropTop;
+                uniform float cropBottom;
                 varying vec2 vUv;
 
                 vec2 RGBtoUV(vec3 rgb) {
@@ -573,7 +584,12 @@ class ARApp {
                 }
 
                 void main() {
-                    vec4 texColor = texture2D(videoTexture, vUv);
+                    // UV 좌표 조정 (상단/하단 크롭)
+                    vec2 croppedUV = vUv;
+                    float cropRange = 1.0 - cropTop - cropBottom;
+                    croppedUV.y = cropBottom + vUv.y * cropRange;
+                    
+                    vec4 texColor = texture2D(videoTexture, croppedUV);
 
                     vec2 chromaVec = RGBtoUV(texColor.rgb) - RGBtoUV(keyColor);
                     float chromaDist = sqrt(dot(chromaVec, chromaVec));
@@ -590,6 +606,13 @@ class ARApp {
         // 평면 지오메트리 (기본 1:1 비율, 영상 로드 후 조정)
         const geometry = new THREE.PlaneGeometry(0.5, 0.5);
         this.hudCube = new THREE.Mesh(geometry, material);
+        
+        // 2번 영상(singgang2.mp4)은 상단/하단 검은 줄 크롭
+        if (this.currentVideoSrc.includes('singgang2')) {
+            material.uniforms.cropTop.value = 0.08;    // 상단 8% 크롭
+            material.uniforms.cropBottom.value = 0.08; // 하단 8% 크롭
+            console.log('[AR] 검은 줄 크롭 적용 (상단/하단 8%)');
+        }
 
         // 카메라의 자식으로 추가 → 화면에 고정
         this.hudCube.position.set(0, 0, -1.5);
