@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>강진 AR</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+
+        /* 로딩 화면 */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+
+        #loading-screen.hidden {
+            display: none;
+        }
+
+        #loading-text {
+            color: #4da6ff;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        #loading-progress {
+            width: 300px;
+            height: 30px;
+            background: #222;
+            border-radius: 15px;
+            overflow: hidden;
+            border: 2px solid #4da6ff;
+        }
+
+        #loading-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #4da6ff, #80c0ff);
+            transition: width 0.3s;
+        }
+
+        #loading-status {
+            color: #888;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        /* Layer 1: Background - 카메라 비디오 */
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        #video-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        #video-background.mirror {
+            transform: scaleX(-1);
+        }
+
+        /* Layer 2: Virtual - Three.js Canvas (투명) */
+        /* width/height는 Three.js가 인라인으로 설정하므로 지정하지 않음 */
+        #canvas-container canvas {
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* 터치 영역 (전체 화면) */
+        #touch-area {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2;
+            background: transparent;
+        }
+
+        /* 안내 오버레이 (화면 중앙) */
+        #instruction-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px 30px;
+            border-radius: 12px;
+            font-size: 16px;
+            text-align: center;
+            z-index: 100;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            line-height: 1.6;
+            opacity: 0;
+        }
+
+        #instruction-overlay.visible {
+            opacity: 1;
+        }
+
+        /* 캡처 버튼 - 하단 중앙 흰색 원 */
+        #capture-btn {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 60px;
+            background: #fff;
+            border: 3px solid rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 100;
+        }
+
+        #capture-btn:active {
+            transform: translateX(-50%) scale(0.9);
+        }
+
+        /* 다운로드(저장) 버튼 - 캡처 왼쪽 */
+        #download-btn {
+            position: absolute;
+            bottom: 38px;
+            left: calc(50% - 90px);
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            line-height: 40px;
+            text-align: center;
+        }
+
+        #download-btn.visible {
+            display: flex;
+        }
+
+        #download-btn:active {
+            transform: scale(0.9);
+        }
+
+        /* 녹화 버튼 - 캡처 오른쪽, 작은 빨간 원 */
+        #record-btn {
+            position: absolute;
+            bottom: 38px;
+            left: calc(50% + 50px);
+            width: 40px;
+            height: 40px;
+            background: #e03030;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 100;
+        }
+
+        #record-btn.recording {
+            background: #ff0000;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.15);
+            }
+        }
+
+        #camera-switch {
+            position: absolute;
+            bottom: 38px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: rgba(20, 20, 20, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            color: #fff;
+        }
+
+        #camera-switch svg {
+            width: 24px;
+            height: 24px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: transform 0.5s ease;
+        }
+
+        #camera-switch:hover {
+            background: rgba(77, 166, 255, 0.15);
+            border-color: rgba(77, 166, 255, 0.5);
+            color: #4da6ff;
+            transform: scale(1.1) rotate(180deg);
+            box-shadow: 0 0 20px rgba(77, 166, 255, 0.3);
+        }
+
+        #camera-switch:active {
+            transform: scale(0.95) rotate(180deg);
+        }
+
+        /* 영상 선택 버튼 컨테이너 */
+        #video-selector {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .video-btn {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .video-btn:active {
+            transform: scale(0.9);
+        }
+
+        .video-btn.active {
+            background: #4da6ff;
+            border-color: #4da6ff;
+            color: #000;
+            font-weight: bold;
+        }
+
+
+        /* 시작 화면 오버레이 */
+        #start-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10002;
+            transition: opacity 0.5s ease;
+        }
+
+        #start-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #start-screen h1 {
+            color: #4da6ff;
+            font-size: 36px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(77, 166, 255, 0.5);
+        }
+
+        #start-screen p {
+            color: #888;
+            font-size: 16px;
+            margin-bottom: 40px;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        /* 시작하기 버튼 */
+        #start-btn {
+            padding: 20px 60px;
+            background: linear-gradient(135deg, #4da6ff, #80c0ff);
+            border: none;
+            border-radius: 50px;
+            color: #000;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 30px rgba(77, 166, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        #start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 40px rgba(77, 166, 255, 0.7);
+        }
+
+        #start-btn:active {
+            transform: scale(0.95);
+        }
+
+        #start-btn:disabled {
+            background: #444;
+            color: #888;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        #permission-status {
+            margin-top: 30px;
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        #permission-status .granted {
+            color: #4da6ff;
+        }
+
+        #permission-status .denied {
+            color: #ff4444;
+        }
+
+        #device-info {
+            position: absolute;
+            bottom: 20px;
+            color: #444;
+            font-size: 12px;
+        }
+
+        /* iOS 권한 요청 버튼 (레거시 - 이제 start-btn 사용) */
+        #ios-permission-btn {
+            display: none;
+        }
+
+        /* 모바일 디버그 패널 */
+        #debug-panel {
+            position: fixed;
+            top: 60px;
+            left: 10px;
+            right: 10px;
+            max-height: 200px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #4da6ff;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #4da6ff;
+            overflow-y: auto;
+            z-index: 9999;
+            display: none;
+            line-height: 1.4;
+        }
+
+        #debug-panel.visible {
+            display: block;
+        }
+
+        #debug-panel .log-entry {
+            margin-bottom: 4px;
+            word-wrap: break-word;
+        }
+
+        #debug-panel .log-error {
+            color: #ff4444;
+        }
+
+        #debug-panel .log-warn {
+            color: #ffaa00;
+        }
+
+        #debug-panel .log-info {
+            color: #00aaff;
+        }
+
+        /* 디버그 토글 버튼 */
+        #debug-toggle {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #4da6ff;
+            border-radius: 50%;
+            color: #4da6ff;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #debug-toggle:active {
+            transform: scale(0.9);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 시작 화면 (권한 요청용 - 사용자 제스처 필요) -->
+    <div id="start-screen">
+        <h1>강진 AR</h1>
+        <p>Web AR 평면 인식 엔진<br>카메라와 센서 권한이 필요합니다</p>
+        <button id="start-btn">시작하기</button>
+        <div id="permission-status"></div>
+        <div id="device-info"></div>
+    </div>
+
+    <!-- 로딩 화면 -->
+    <div id="loading-screen" class="hidden">
+        <div id="loading-text">강진 AR 로딩 중...</div>
+        <div id="loading-progress">
+            <div id="loading-bar"></div>
+        </div>
+        <div id="loading-status">AR 엔진 초기화 중...</div>
+    </div>
+
+    <!-- Layer 1: Background (카메라 비디오) -->
+    <!-- Layer 2: Virtual (Three.js 캔버스 - main.js에서 추가) -->
+    <div id="canvas-container">
+        <video id="video-background" playsinline autoplay muted></video>
+    </div>
+
+    <!-- Layer 3: Touch Area (터치 이벤트 수신) -->
+    <div id="touch-area"></div>
+
+    <!-- 안내 오버레이 (터치 시 사라짐) -->
+    <div id="instruction-overlay">
+        드래그: 위치 이동<br>
+        핀치: 크기 조절
+    </div>
+
+    <!-- 영상 선택 버튼 -->
+    <div id="video-selector">
+        <button class="video-btn active" data-video="greetgang.mp4">01</button>
+        <button class="video-btn" data-video="singgang2.mp4">02</button>
+    </div>
+
+    <button id="download-btn">↓</button>
+    <button id="capture-btn"></button>
+    <button id="record-btn"></button>
+    <button id="camera-switch">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M20 11a8.1 8.1 0 0 0 -6.986 -6.918a8.095 8.095 0 0 0 -8.019 3.918h-2" />
+            <path d="M4 13a8.1 8.1 0 0 0 15 3" />
+            <path d="M19 16m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+            <path d="M5 8m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+            <path d="M15 2.5l3 3l-3 3" />
+            <path d="M9 21.5l-3 -3l3 -3" />
+        </svg>
+    </button>
+
+    <!-- iOS 권한 요청 버튼 (레거시) -->
+    <button id="ios-permission-btn" style="display:none;"></button>
+
+    <!-- 모바일 디버그 패널 -->
+    <button id="debug-toggle">🐛</button>
+    <div id="debug-panel"></div>
+
+    <script>
+        // ========================================
+        // 모바일 디버그 패널 초기화
+        // ========================================
+        (function () {
+            const debugPanel = document.getElementById('debug-panel');
+            const debugToggle = document.getElementById('debug-toggle');
+            let isDebugVisible = false;
+            const maxLogs = 50; // 최대 로그 개수
+
+            // 디버그 토글 버튼
+            if (debugToggle) {
+                debugToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    isDebugVisible = !isDebugVisible;
+                    if (isDebugVisible) {
+                        debugPanel.classList.add('visible');
+                    } else {
+                        debugPanel.classList.remove('visible');
+                    }
+                });
+            }
+
+            // 로그 추가 함수
+            function addLog(message, type = 'log') {
+                if (!debugPanel) return;
+
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                if (type === 'error') entry.classList.add('log-error');
+                else if (type === 'warn') entry.classList.add('log-warn');
+                else if (type === 'info') entry.classList.add('log-info');
+
+                const timestamp = new Date().toLocaleTimeString('ko-KR', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                entry.textContent = `[${timestamp}] ${message}`;
+
+                debugPanel.appendChild(entry);
+
+                // 최대 로그 개수 제한
+                while (debugPanel.children.length > maxLogs) {
+                    debugPanel.removeChild(debugPanel.firstChild);
+                }
+
+                // 자동 스크롤
+                debugPanel.scrollTop = debugPanel.scrollHeight;
+            }
+
+            // console.log 가로채기
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            const originalInfo = console.info;
+
+            console.log = function (...args) {
+                originalLog.apply(console, args);
+                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'log');
+            };
+
+            console.error = function (...args) {
+                originalError.apply(console, args);
+                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'error');
+            };
+
+            console.warn = function (...args) {
+                originalWarn.apply(console, args);
+                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'warn');
+            };
+
+            console.info = function (...args) {
+                originalInfo.apply(console, args);
+                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'info');
+            };
+
+            // 에러 이벤트 캐치
+            window.addEventListener('error', (e) => {
+                addLog(`ERROR: ${e.message} at ${e.filename}:${e.lineno}`, 'error');
+            });
+
+            console.log('[Debug] 모바일 디버그 패널 초기화 완료');
+        })();
+
+        console.log('페이지 로드 시작');
+
+        // ========================================
+        // 디바이스 정보 감지
+        // ========================================
+        function detectDevice() {
+            const ua = navigator.userAgent;
+            const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+            const isAndroid = /Android/.test(ua);
+            const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua);
+
+            let iosVersion = 0;
+            if (isIOS) {
+                const match = ua.match(/OS (\d+)_/);
+                if (match) iosVersion = parseInt(match[1], 10);
+            }
+
+            const needsPermission = isIOS && iosVersion >= 13 &&
+                typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function';
+
+            return { isIOS, isAndroid, isSafari, iosVersion, needsPermission };
+        }
+
+        const deviceInfo = detectDevice();
+
+        // 디바이스 정보 표시
+        const deviceInfoEl = document.getElementById('device-info');
+        if (deviceInfoEl) {
+            let info = '';
+            if (deviceInfo.isIOS) info = `iOS ${deviceInfo.iosVersion}`;
+            else if (deviceInfo.isAndroid) info = 'Android';
+            else info = 'Desktop';
+            if (deviceInfo.needsPermission) info += ' (권한 요청 필요)';
+            deviceInfoEl.textContent = info;
+        }
+
+        // ========================================
+        // 로딩 프로그레스 함수
+        // ========================================
+        function updateLoadingProgress(percent, status) {
+            const bar = document.getElementById('loading-bar');
+            const statusText = document.getElementById('loading-status');
+
+            if (bar) bar.style.width = percent + '%';
+            if (statusText) statusText.textContent = status;
+        }
+
+        function showLoadingScreen() {
+            const screen = document.getElementById('loading-screen');
+            if (screen) screen.classList.remove('hidden');
+        }
+
+        function hideLoadingScreen() {
+            const screen = document.getElementById('loading-screen');
+            if (screen) screen.classList.add('hidden');
+        }
+
+        function hideStartScreen() {
+            const screen = document.getElementById('start-screen');
+            if (screen) screen.classList.add('hidden');
+        }
+
+        // 전역에 노출
+        window.updateLoadingProgress = updateLoadingProgress;
+        window.showLoadingScreen = showLoadingScreen;
+        window.hideLoadingScreen = hideLoadingScreen;
+        window.hideStartScreen = hideStartScreen;
+        window.deviceInfo = deviceInfo;
+
+        // ========================================
+        // 시작 버튼 클릭 핸들러 (사용자 제스처)
+        // ========================================
+        const startBtn = document.getElementById('start-btn');
+        const permissionStatus = document.getElementById('permission-status');
+
+        startBtn.addEventListener('click', async () => {
+            console.log('========================================');
+            console.log('    시작 버튼 클릭 - 권한 요청 시작');
+            console.log('========================================');
+
+            startBtn.disabled = true;
+            startBtn.textContent = '권한 요청 중...';
+            permissionStatus.innerHTML = '';
+
+            try {
+                // 1. 카메라 권한 요청
+                permissionStatus.innerHTML = '카메라 권한 요청 중...';
+                const cameraStream = await requestCameraPermission();
+
+                if (cameraStream) {
+                    permissionStatus.innerHTML = '<span class="granted">✓ 카메라 권한 승인</span>';
+
+                    // 카메라 스트림을 비디오에 연결
+                    const video = document.getElementById('video-background');
+                    if (video) {
+                        video.srcObject = cameraStream;
+                        video.muted = true;
+                        video.playsInline = true;
+                        await video.play();
+                        console.log('비디오 재생 시작:', video.videoWidth, 'x', video.videoHeight);
+                    }
+
+                    // 전역에 저장
+                    window.cameraStream = cameraStream;
+                } else {
+                    throw new Error('카메라 권한 거부됨');
+                }
+
+                // 2. 센서 권한 요청 (iOS 13+)
+                permissionStatus.innerHTML += '<br>센서 권한 요청 중...';
+                const sensorGranted = await requestSensorPermissions();
+
+                if (sensorGranted) {
+                    permissionStatus.innerHTML = '<span class="granted">✓ 카메라 권한 승인</span><br>' +
+                        '<span class="granted">✓ 센서 권한 승인</span>';
+                } else {
+                    permissionStatus.innerHTML = '<span class="granted">✓ 카메라 권한 승인</span><br>' +
+                        '<span class="denied">✗ 센서 권한 거부 (기능 제한)</span>';
+                }
+
+                window.sensorPermissionGranted = sensorGranted;
+
+                // 3. 권한 획득 완료 → 시작 화면 숨기고 로딩 화면 표시
+                setTimeout(() => {
+                    hideStartScreen();
+                    showLoadingScreen();
+                    updateLoadingProgress(10, 'AR 엔진 초기화 중...');
+
+                    // AR 앱 시작 신호
+                    window.permissionsGranted = true;
+                    window.dispatchEvent(new CustomEvent('permissionsGranted'));
+                }, 500);
+
+            } catch (error) {
+                console.error('권한 요청 실패:', error);
+                permissionStatus.innerHTML = `<span class="denied">✗ ${error.message}</span>`;
+                startBtn.disabled = false;
+                startBtn.textContent = '다시 시도';
+            }
+        });
+
+        // ========================================
+        // 카메라 권한 요청
+        // ========================================
+        async function requestCameraPermission() {
+            console.log('[Permission] 카메라 권한 요청...');
+
+            const constraints = {
+                video: {
+                    facingMode: 'environment', // 후면 카메라
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('[Permission] 카메라 권한 승인됨');
+
+                const track = stream.getVideoTracks()[0];
+                if (track) {
+                    const settings = track.getSettings();
+                    console.log('[Permission] 카메라:', settings.width, 'x', settings.height, settings.facingMode);
+                }
+
+                return stream;
+
+            } catch (error) {
+                console.error('[Permission] 카메라 에러:', error.name, error.message);
+
+                // 후면 카메라 실패 시 전면 카메라 시도
+                if (error.name === 'OverconstrainedError') {
+                    console.log('[Permission] 후면 카메라 실패, 전면 카메라 시도...');
+                    try {
+                        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'user' },
+                            audio: false
+                        });
+                        return fallbackStream;
+                    } catch (e2) {
+                        console.error('[Permission] 전면 카메라도 실패:', e2);
+                    }
+                }
+
+                return null;
+            }
+        }
+
+        // ========================================
+        // 센서 권한 요청 (iOS 13+)
+        // ========================================
+        async function requestSensorPermissions() {
+            console.log('[Permission] 센서 권한 요청...');
+
+            let motionGranted = true;
+            let orientationGranted = true;
+
+            // DeviceMotionEvent 권한 (iOS 13+)
+            if (typeof DeviceMotionEvent !== 'undefined' &&
+                typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceMotionEvent.requestPermission();
+                    motionGranted = (permission === 'granted');
+                    console.log('[Permission] DeviceMotion:', permission);
+                } catch (e) {
+                    console.error('[Permission] DeviceMotion 에러:', e);
+                    motionGranted = false;
+                }
+            }
+
+            // DeviceOrientationEvent 권한 (iOS 13+)
+            if (typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    orientationGranted = (permission === 'granted');
+                    console.log('[Permission] DeviceOrientation:', permission);
+                } catch (e) {
+                    console.error('[Permission] DeviceOrientation 에러:', e);
+                    orientationGranted = false;
+                }
+            }
+
+            return motionGranted && orientationGranted;
+        }
+
+        // ========================================
+        // 카메라 전환 함수
+        // ========================================
+        window.currentFacingMode = 'environment'; // 현재 카메라 방향 추적
+
+        window.switchCamera = async function () {
+            console.log('[Camera] 카메라 전환...');
+
+            if (!window.cameraStream) {
+                console.error('[Camera] 기존 스트림 없음');
+                return;
+            }
+
+            // 변수로 추적한 현재 방향을 토글
+            const newFacing = window.currentFacingMode === 'environment' ? 'user' : 'environment';
+
+            // 기존 스트림 정지
+            window.cameraStream.getTracks().forEach(t => t.stop());
+
+            try {
+                const newStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { exact: newFacing },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+
+                window.cameraStream = newStream;
+                window.currentFacingMode = newFacing;
+
+                const video = document.getElementById('video-background');
+                if (video) {
+                    video.srcObject = newStream;
+                    video.classList.toggle('mirror', newFacing === 'user');
+                    await video.play();
+                }
+
+                console.log('[Camera] 전환 완료:', newFacing);
+
+            } catch (error) {
+                console.warn('[Camera] exact 실패, ideal로 재시도:', error);
+                try {
+                    const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { ideal: newFacing },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
+                        audio: false
+                    });
+
+                    window.cameraStream = fallbackStream;
+                    window.currentFacingMode = newFacing;
+
+                    const video = document.getElementById('video-background');
+                    if (video) {
+                        video.srcObject = fallbackStream;
+                        video.classList.toggle('mirror', newFacing === 'user');
+                        await video.play();
+                    }
+
+                    console.log('[Camera] 전환 완료 (ideal):', newFacing);
+                } catch (e2) {
+                    console.error('[Camera] 전환 실패:', e2);
+                }
+            }
+        };
+
+        // 카메라 전환 버튼은 main.js에서 처리
+
+        // ========================================
+        // 안내 오버레이 - AR 시작 후 표시, 터치 시 사라짐
+        // ========================================
+        window.showInstruction = function () {
+            const overlay = document.getElementById('instruction-overlay');
+            if (!overlay) return;
+            overlay.classList.add('visible');
+
+            function dismiss() {
+                overlay.classList.remove('visible');
+                document.removeEventListener('touchstart', dismiss);
+                document.removeEventListener('mousedown', dismiss);
+            }
+            // 약간 딜레이 후 리스너 등록 (show 직후 바로 사라지는 것 방지)
+            setTimeout(() => {
+                document.addEventListener('touchstart', dismiss, { once: true });
+                document.addEventListener('mousedown', dismiss, { once: true });
+            }, 300);
+        };
+
+        // ========================================
+        // 저장용 변수 및 다운로드 버튼
+        // ========================================
+        let lastSavedFile = null;
+        const downloadBtn = document.getElementById('download-btn');
+
+        function showDownloadBtn() {
+            downloadBtn.classList.add('visible');
+        }
+
+        // 다운로드 버튼 클릭 - 사용자 제스처 컨텍스트에서 실행됨
+        downloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!lastSavedFile) return;
+
+            if (deviceInfo.isIOS && navigator.canShare && navigator.canShare({ files: [lastSavedFile] })) {
+                navigator.share({ files: [lastSavedFile] })
+                    .then(() => {
+                        console.log('[Download] iOS - 공유 시트로 저장 완료');
+                        // 다운로드 버튼 숨김
+                        downloadBtn.classList.remove('visible');
+                        lastSavedFile = null;
+                    })
+                    .catch((err) => {
+                        if (err.name !== 'AbortError') {
+                            console.log('[Download] 공유 실패:', err);
+                        }
+                    });
+            } else {
+                // Android 및 기타 플랫폼은 파일 다운로드
+                const url = URL.createObjectURL(lastSavedFile);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = lastSavedFile.name;
+                a.click();
+                URL.revokeObjectURL(url);
+                console.log('[Download] 파일 다운로드 완료');
+                // 다운로드 버튼 숨김
+                downloadBtn.classList.remove('visible');
+                lastSavedFile = null;
+            }
+        });
+
+        // 파일 다운로드 헬퍼 함수
+        function downloadFile(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ========================================
+        // 페이지 visibility 복구 (공유/다운로드 후 복귀 시)
+        // ========================================
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                // 카메라 비디오 재생 복구
+                const video = document.getElementById('video-background');
+                if (video && video.paused && window.cameraStream) {
+                    video.play().catch(e => console.warn('[Recovery] 카메라 재생 실패:', e));
+                }
+                // 크로마키 영상 재생 복구
+                if (window.arApp && window.arApp.hudVideo && window.arApp.hudVideo.paused) {
+                    window.arApp.hudVideo.play().catch(e => console.warn('[Recovery] AR 영상 재생 실패:', e));
+                }
+            }
+        });
+
+        // ========================================
+        // 화면 캡처 기능
+        // ========================================
+        document.getElementById('capture-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            captureScreen();
+        });
+
+        // object-fit: cover 방식으로 비디오를 캔버스에 그리는 헬퍼
+        function drawVideoCover(ctx, video, canvasWidth, canvasHeight, mirror = false) {
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            if (videoWidth === 0 || videoHeight === 0) return;
+
+            const videoRatio = videoWidth / videoHeight;
+            const canvasRatio = canvasWidth / canvasHeight;
+
+            let sx, sy, sWidth, sHeight;
+
+            if (videoRatio > canvasRatio) {
+                // 비디오가 더 넓음 - 좌우 잘라냄
+                sHeight = videoHeight;
+                sWidth = videoHeight * canvasRatio;
+                sx = (videoWidth - sWidth) / 2;
+                sy = 0;
+            } else {
+                // 비디오가 더 높음 - 상하 잘라냄
+                sWidth = videoWidth;
+                sHeight = videoWidth / canvasRatio;
+                sx = 0;
+                sy = (videoHeight - sHeight) / 2;
+            }
+
+            // 전면 카메라 좌우 반전 처리
+            if (mirror) {
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, sx, sy, sWidth, sHeight, -canvasWidth, 0, canvasWidth, canvasHeight);
+                ctx.restore();
+            } else {
+                ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvasWidth, canvasHeight);
+            }
+        }
+
+        function captureScreen() {
+            const video = document.getElementById('video-background');
+            const arCanvas = document.querySelector('#canvas-container canvas');
+            if (!video || !arCanvas) return;
+
+            // 전면 카메라 여부 확인
+            const isMirrored = window.currentFacingMode === 'user';
+
+            // AR 캔버스 크기 그대로 사용 (가장 정확함)
+            const canvas = document.createElement('canvas');
+            canvas.width = arCanvas.width;
+            canvas.height = arCanvas.height;
+            const ctx = canvas.getContext('2d');
+
+            // Layer 1: 비디오 배경 (object-fit: cover 방식)
+            drawVideoCover(ctx, video, canvas.width, canvas.height, isMirrored);
+
+            // Layer 2: AR 오버레이 (그대로 복사)
+            ctx.drawImage(arCanvas, 0, 0);
+
+            // Blob 생성 후 저장
+            canvas.toBlob((blob) => {
+                const filename = 'ar-capture-' + Date.now() + '.png';
+                lastSavedFile = new File([blob], filename, { type: 'image/png' });
+                showDownloadBtn();
+                console.log('[Capture] 캡처 완료 - 다운로드 버튼으로 저장 가능');
+            }, 'image/png');
+        }
+
+        // ========================================
+        // 화면 녹화 기능
+        // ========================================
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let recordingStream = null;
+        let isRecording = false;  // 녹화 상태 추적
+
+        const recordBtn = document.getElementById('record-btn');
+        if (!recordBtn) {
+            console.error('[Record] 녹화 버튼을 찾을 수 없습니다!');
+        } else {
+            console.log('[Record] 녹화 버튼 이벤트 리스너 등록');
+            recordBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                console.log('[Record] 녹화 버튼 클릭됨, 현재 상태:', isRecording);
+
+                if (isRecording) {
+                    console.log('[Record] 녹화 중지 호출');
+                    stopRecording();
+                } else {
+                    console.log('[Record] 녹화 시작 호출');
+                    startRecording();
+                }
+            });
+        }
+
+        // 브라우저가 지원하는 최적 녹화 포맷 감지
+        function getRecordingFormat() {
+            console.log('[Record] === 지원 포맷 감지 시작 ===');
+            const types = [
+                // iOS 호환성을 위해 MP4 우선
+                { mimeType: 'video/mp4', ext: 'mp4' },
+                { mimeType: 'video/mp4;codecs=avc1', ext: 'mp4' },
+                { mimeType: 'video/mp4;codecs=h264', ext: 'mp4' },
+                // WebM 폴백
+                { mimeType: 'video/webm;codecs=vp9', ext: 'webm' },
+                { mimeType: 'video/webm;codecs=vp8', ext: 'webm' },
+                { mimeType: 'video/webm', ext: 'webm' },
+            ];
+
+            console.log('[Record] 테스트할 포맷:', types.length, '개');
+
+            for (const t of types) {
+                const supported = MediaRecorder.isTypeSupported(t.mimeType);
+                console.log('[Record] 포맷 테스트:', t.mimeType, '→', supported ? '✓ 지원' : '✗ 미지원');
+                if (supported) {
+                    console.log('[Record] ✓ 선택된 포맷:', t.mimeType);
+                    return t;
+                }
+            }
+
+            console.warn('[Record] ⚠ 지원되는 포맷 없음! 기본값 사용');
+            return { mimeType: '', ext: 'mp4' }; // 빈 mimeType = 브라우저 기본값, 확장자는 mp4
+        }
+
+        let recordingFormat = null;
+        let recordingAnimId = null;
+
+        function startRecording() {
+            console.log('[Record] === startRecording 함수 시작 ===');
+            const video = document.getElementById('video-background');
+            const arCanvas = document.querySelector('#canvas-container canvas');
+
+            if (!video) {
+                console.error('[Record] video 엘리먼트 없음!');
+                return;
+            }
+            if (!arCanvas) {
+                console.error('[Record] AR 캔버스 없음!');
+                return;
+            }
+
+            console.log('[Record] 비디오/캔버스 확인 완료');
+
+            try {
+                recordingFormat = getRecordingFormat();
+                console.log('[Record] 녹화 포맷:', recordingFormat);
+
+                // 전면 카메라 여부 (녹화 시작 시점 기준)
+                const isMirrored = window.currentFacingMode === 'user';
+                console.log('[Record] 미러링 모드:', isMirrored);
+
+                // === 화질 개선: 고해상도 캔버스 사용 ===
+                const pixelRatio = window.devicePixelRatio || 1;
+                const canvasWidth = window.innerWidth * pixelRatio;
+                const canvasHeight = window.innerHeight * pixelRatio;
+
+                const compositeCanvas = document.createElement('canvas');
+                compositeCanvas.width = canvasWidth;
+                compositeCanvas.height = canvasHeight;
+                const ctx = compositeCanvas.getContext('2d', {
+                    alpha: false,  // 알파 채널 불필요 (성능 향상)
+                    desynchronized: true  // 성능 최적화
+                });
+                console.log('[Record] 합성 캔버스 생성:', compositeCanvas.width, 'x', compositeCanvas.height, '(픽셀비율:', pixelRatio + ')');
+
+                // 프레임 합성 루프
+                function drawFrame() {
+                    if (!isRecording) return;
+                    drawVideoCover(ctx, video, compositeCanvas.width, compositeCanvas.height, isMirrored);
+                    ctx.drawImage(arCanvas, 0, 0, arCanvas.width, arCanvas.height, 0, 0, compositeCanvas.width, compositeCanvas.height);
+                    recordingAnimId = requestAnimationFrame(drawFrame);
+                }
+
+                // 캔버스에서 스트림 생성 (60fps)
+                recordingStream = compositeCanvas.captureStream(60);
+                recordedChunks = [];
+                console.log('[Record] 스트림 생성 완료 (60fps)');
+
+                // === 화질 개선: 고비트레이트 설정 ===
+                const options = recordingFormat.mimeType
+                    ? {
+                        mimeType: recordingFormat.mimeType,
+                        videoBitsPerSecond: 8000000  // 8Mbps (고화질)
+                    }
+                    : {
+                        videoBitsPerSecond: 8000000  // 8Mbps (고화질)
+                    };
+                console.log('[Record] MediaRecorder 옵션:', options);
+                mediaRecorder = new MediaRecorder(recordingStream, options);
+                console.log('[Record] MediaRecorder 생성 완료');
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) {
+                        recordedChunks.push(e.data);
+                        console.log('[Record] 데이터 수신:', e.data.size, 'bytes, 총:', recordedChunks.length, '청크');
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    console.log('[Record] === MediaRecorder 중지됨 ===');
+                    isRecording = false;
+                    cancelAnimationFrame(recordingAnimId);
+                    recordBtn.classList.remove('recording');
+
+                    console.log('[Record] 총 청크 수:', recordedChunks.length);
+
+                    const blobType = recordingFormat.ext === 'mp4' ? 'video/mp4' : 'video/webm';
+                    const blob = new Blob(recordedChunks, { type: blobType });
+                    const filename = 'ar-recording-' + Date.now() + '.' + recordingFormat.ext;
+
+                    console.log('[Record] Blob 크기:', blob.size, 'bytes');
+
+                    lastSavedFile = new File([blob], filename, { type: blobType });
+                    showDownloadBtn();
+                    console.log('[Record] 녹화 완료 - 다운로드 버튼으로 저장 가능');
+
+                    recordedChunks = [];
+                    mediaRecorder = null;
+                };
+
+                mediaRecorder.onerror = (e) => {
+                    console.error('[Record] === MediaRecorder 에러 발생! ===');
+                    console.error('[Record] 에러 타입:', e.error ? e.error.name : 'Unknown');
+                    console.error('[Record] 에러 메시지:', e.error ? e.error.message : 'No message');
+                    console.error('[Record] 전체 에러:', e);
+                    isRecording = false;
+                    if (recordBtn) recordBtn.classList.remove('recording');
+                };
+
+                console.log('[Record] MediaRecorder 시작 직전, isRecording:', isRecording);
+
+                // MediaRecorder.start()를 try-catch로 감싸기
+                try {
+                    // timeslice 파라미터 추가 (100ms마다 데이터 수집)
+                    mediaRecorder.start(100);
+                    isRecording = true;
+                    recordBtn.classList.add('recording');
+                    drawFrame();
+                    console.log('[Record] === 녹화 시작됨! ===');
+                } catch (startError) {
+                    console.error('[Record] mediaRecorder.start() 실패:', startError);
+                    console.error('[Record] 에러 이름:', startError.name);
+                    console.error('[Record] 에러 메시지:', startError.message);
+                    isRecording = false;
+                    if (recordBtn) recordBtn.classList.remove('recording');
+                    throw startError;
+                }
+            } catch (error) {
+                console.error('[Record] 녹화 시작 실패:', error);
+                isRecording = false;
+                if (recordBtn) recordBtn.classList.remove('recording');
+            }
+        }
+
+        function stopRecording() {
+            console.log('[Record] 녹화 정지 요청');
+            isRecording = false;
+            if (mediaRecorder) {
+                try {
+                    if (mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                } catch (e) {
+                    console.warn('[Record] 녹화 정지 오류:', e);
+                }
+            }
+            cancelAnimationFrame(recordingAnimId);
+            recordBtn.classList.remove('recording');
+        }
+
+        // ========================================
+        // 영상 선택 버튼 이벤트
+        // ========================================
+        document.querySelectorAll('.video-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                // 활성 버튼 업데이트
+                document.querySelectorAll('.video-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // 영상 변경 (main.js의 함수 호출)
+                const videoSrc = btn.dataset.video;
+                if (window.changeARVideo) {
+                    window.changeARVideo(videoSrc);
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

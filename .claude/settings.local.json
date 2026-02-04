@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm start)",
+      "Bash(npx webpack serve --mode development --port 3000)",
+      "Bash(findstr:*)"
+    ]
+  }
+}
