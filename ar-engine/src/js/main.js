@@ -522,17 +522,23 @@ class ARApp {
         this.hudVideo.setAttribute('playsinline', '');
         this.hudVideo.setAttribute('webkit-playsinline', '');
         this.hudVideo.crossOrigin = 'anonymous';
-        this.hudVideo.preload = 'metadata';
+        
+        // 버퍼링 최적화 설정
+        this.hudVideo.preload = 'auto';  // 'metadata' → 'auto'로 변경
+        this.hudVideo.autoplay = false;
+        
         this.hudVideo.src = this.currentVideoSrc;
         
-        // 사운드가 있는 영상의 경우 볼륨 설정
+        // 사운드가 있는 영상의 경우 볼륨 설정 및 안내창 표시
         if (!this.hudVideo.muted) {
             this.hudVideo.volume = 0.8;
             console.log('[AR] 사운드 활성화 (볼륨: 80%)');
+            this.showNotification('2번째는 음악이 나옵니다', 3000);
         }
 
-        // 비디오 재생 시도 (canplay 이벤트 + 직접 호출)
+        // 비디오 재생 시도 (버퍼링 대기 후)
         const tryPlay = () => {
+            console.log('[AR] 비디오 준비됨, 재생 시작');
             this.hudVideo.play().catch(e => {
                 console.warn('[AR] 영상 자동재생 실패, 재시도:', e.message);
                 // 1초 후 재시도
@@ -541,7 +547,18 @@ class ARApp {
                 }, 1000);
             });
         };
-        this.hudVideo.addEventListener('canplay', tryPlay, { once: true });
+        
+        // canplaythrough: 충분히 버퍼링되어 끊김 없이 재생 가능
+        this.hudVideo.addEventListener('canplaythrough', tryPlay, { once: true });
+        
+        // 버퍼링 이벤트 모니터링
+        this.hudVideo.addEventListener('waiting', () => {
+            console.warn('[AR] 비디오 버퍼링 중...');
+        });
+        this.hudVideo.addEventListener('playing', () => {
+            console.log('[AR] 비디오 재생 중');
+        });
+        
         this.hudVideo.load();
 
         // VideoTexture 생성
@@ -609,9 +626,9 @@ class ARApp {
         
         // 2번 영상(singgang2.mp4)은 상단/하단 검은 줄 크롭
         if (this.currentVideoSrc.includes('singgang2')) {
-            material.uniforms.cropTop.value = 0.08;    // 상단 8% 크롭
-            material.uniforms.cropBottom.value = 0.08; // 하단 8% 크롭
-            console.log('[AR] 검은 줄 크롭 적용 (상단/하단 8%)');
+            material.uniforms.cropTop.value = 0.03;    // 상단 3% 크롭
+            material.uniforms.cropBottom.value = 0.03; // 하단 3% 크롭
+            console.log('[AR] 검은 줄 크롭 적용 (상단/하단 3%)');
         }
 
         // 카메라의 자식으로 추가 → 화면에 고정
@@ -623,12 +640,23 @@ class ARApp {
 
         // 영상 메타데이터 로드 후 비율 조정
         this.hudVideo.addEventListener('loadedmetadata', () => {
-            const aspect = this.hudVideo.videoWidth / this.hudVideo.videoHeight;
+            let aspect = this.hudVideo.videoWidth / this.hudVideo.videoHeight;
+            
+            // 2번 영상(singgang2.mp4)은 1080x1920 세로 영상
+            // 크롭으로 인해 가로가 눌려 보이므로 보정
+            if (this.currentVideoSrc.includes('singgang2')) {
+                // 크롭된 비율 계산 (상하단 3%씩 제거 = 94% 높이)
+                const cropFactor = 1.0 - 0.03 - 0.03; // 0.94
+                // 실제 표시 비율 조정 (약간 넓게)
+                aspect = aspect * 1.15; // 15% 넓게 보정
+                console.log('[AR] 2번 영상 비율 보정:', aspect);
+            }
+            
             const height = 0.5;
             const width = height * aspect;
             this.hudCube.geometry.dispose();
             this.hudCube.geometry = new THREE.PlaneGeometry(width, height);
-            console.log('[AR] 영상 크기:', this.hudVideo.videoWidth, 'x', this.hudVideo.videoHeight);
+            console.log('[AR] 영상 크기:', this.hudVideo.videoWidth, 'x', this.hudVideo.videoHeight, '| 비율:', aspect.toFixed(2));
         });
 
         console.log('[AR] HUD 영상 배치됨 (크로마키 제거)');
@@ -876,6 +904,65 @@ class ARApp {
             this.visualOdometry.destroy();
         }
         console.log('[AR] 종료');
+    }
+
+    /**
+     * 화면 중앙에 알림 표시
+     * @param {string} message - 표시할 메시지
+     * @param {number} duration - 표시 시간 (밀리초)
+     */
+    showNotification(message, duration = 3000) {
+        // 기존 알림이 있으면 제거
+        const existing = document.getElementById('ar-notification');
+        if (existing) {
+            existing.remove();
+        }
+
+        // 알림 엘리먼트 생성
+        const notification = document.createElement('div');
+        notification.id = 'ar-notification';
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 20px 40px;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 10000;
+            pointer-events: none;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            animation: fadeInOut 3s ease-in-out;
+        `;
+
+        // CSS 애니메이션 추가
+        if (!document.getElementById('ar-notification-style')) {
+            const style = document.createElement('style');
+            style.id = 'ar-notification-style';
+            style.textContent = `
+                @keyframes fadeInOut {
+                    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                    10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                    90% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(notification);
+
+        // 지정된 시간 후 제거
+        setTimeout(() => {
+            notification.remove();
+        }, duration);
+
+        console.log('[AR] 알림 표시:', message);
     }
 }
 
