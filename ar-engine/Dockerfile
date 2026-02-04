@@ -2,8 +2,10 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# 의존성 설치 (webpack 빌드를 위해 devDependencies 포함)
-COPY package.json package-lock.json* ./
+# 패키지 파일 복사
+COPY package.json ./
+
+# npm install 실행 (package-lock.json 생성 포함)
 RUN npm install --include=dev
 
 # 소스 복사
@@ -11,6 +13,9 @@ COPY . .
 
 # webpack 빌드
 RUN npm run build
+
+# 불필요한 devDependencies 제거 (프로덕션용)
+RUN npm prune --production
 
 # 포트 노출
 EXPOSE 3000

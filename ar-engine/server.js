@@ -20,5 +20,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`AR Vision server running on port ${PORT}`);
+    console.log(`강진 AR server running on port ${PORT}`);
 });

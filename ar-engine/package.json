@@ -1,5 +1,5 @@
 {
-  "name": "ar-vision",
+  "name": "gangjin-ar",
   "version": "1.0.0",
   "scripts": {
     "start": "node server.js",
