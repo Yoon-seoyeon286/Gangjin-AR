@@ -389,71 +389,6 @@
         #ios-permission-btn {
             display: none;
         }
-
-        /* 모바일 디버그 패널 */
-        #debug-panel {
-            position: fixed;
-            top: 60px;
-            left: 10px;
-            right: 10px;
-            max-height: 200px;
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid #4da6ff;
-            border-radius: 8px;
-            padding: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-            color: #4da6ff;
-            overflow-y: auto;
-            z-index: 9999;
-            display: none;
-            line-height: 1.4;
-        }
-
-        #debug-panel.visible {
-            display: block;
-        }
-
-        #debug-panel .log-entry {
-            margin-bottom: 4px;
-            word-wrap: break-word;
-        }
-
-        #debug-panel .log-error {
-            color: #ff4444;
-        }
-
-        #debug-panel .log-warn {
-            color: #ffaa00;
-        }
-
-        #debug-panel .log-info {
-            color: #00aaff;
-        }
-
-        /* 디버그 토글 버튼 */
-        #debug-toggle {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            width: 40px;
-            height: 40px;
-            background: rgba(0, 0, 0, 0.7);
-            border: 2px solid #4da6ff;
-            border-radius: 50%;
-            color: #4da6ff;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            z-index: 10000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #debug-toggle:active {
-            transform: scale(0.9);
-        }
     </style>
 </head>
 
@@ -513,10 +448,6 @@
 
     <!-- iOS 권한 요청 버튼 (레거시) -->
     <button id="ios-permission-btn" style="display:none;"></button>
-
-    <!-- 모바일 디버그 패널 -->
-    <button id="debug-toggle">🐛</button>
-    <div id="debug-panel"></div>
 
     <script>
         // ========================================
@@ -649,91 +580,6 @@
                 
                 document.body.removeChild(input);
             }
-        })();
-
-        // ========================================
-        // 모바일 디버그 패널 초기화
-        // ========================================
-        (function () {
-            const debugPanel = document.getElementById('debug-panel');
-            const debugToggle = document.getElementById('debug-toggle');
-            let isDebugVisible = false;
-            const maxLogs = 50; // 최대 로그 개수
-
-            // 디버그 토글 버튼
-            if (debugToggle) {
-                debugToggle.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    isDebugVisible = !isDebugVisible;
-                    if (isDebugVisible) {
-                        debugPanel.classList.add('visible');
-                    } else {
-                        debugPanel.classList.remove('visible');
-                    }
-                });
-            }
-
-            // 로그 추가 함수
-            function addLog(message, type = 'log') {
-                if (!debugPanel) return;
-
-                const entry = document.createElement('div');
-                entry.className = 'log-entry';
-                if (type === 'error') entry.classList.add('log-error');
-                else if (type === 'warn') entry.classList.add('log-warn');
-                else if (type === 'info') entry.classList.add('log-info');
-
-                const timestamp = new Date().toLocaleTimeString('ko-KR', {
-                    hour12: false,
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
-                entry.textContent = `[${timestamp}] ${message}`;
-
-                debugPanel.appendChild(entry);
-
-                // 최대 로그 개수 제한
-                while (debugPanel.children.length > maxLogs) {
-                    debugPanel.removeChild(debugPanel.firstChild);
-                }
-
-                // 자동 스크롤
-                debugPanel.scrollTop = debugPanel.scrollHeight;
-            }
-
-            // console.log 가로채기
-            const originalLog = console.log;
-            const originalError = console.error;
-            const originalWarn = console.warn;
-            const originalInfo = console.info;
-
-            console.log = function (...args) {
-                originalLog.apply(console, args);
-                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'log');
-            };
-
-            console.error = function (...args) {
-                originalError.apply(console, args);
-                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'error');
-            };
-
-            console.warn = function (...args) {
-                originalWarn.apply(console, args);
-                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'warn');
-            };
-
-            console.info = function (...args) {
-                originalInfo.apply(console, args);
-                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'info');
-            };
-
-            // 에러 이벤트 캐치
-            window.addEventListener('error', (e) => {
-                addLog(`ERROR: ${e.message} at ${e.filename}:${e.lineno}`, 'error');
-            });
-
-            console.log('[Debug] 모바일 디버그 패널 초기화 완료');
         })();
 
         console.log('페이지 로드 시작');
