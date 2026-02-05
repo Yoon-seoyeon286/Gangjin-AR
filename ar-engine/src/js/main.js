@@ -44,7 +44,6 @@ class ARApp {
         this.hudVideo = null;            // webm 비디오 엘리먼트
         this.hudVideoTexture = null;     // VideoTexture
         this.currentVideoSrc = 'greetgang.mp4'; // 현재 영상 소스
-        this.videoCache = {};            // 비디오 캐시 (프리로드)
 
         // === 제스처 상태 ===
         this.gesture = {
@@ -524,14 +523,9 @@ class ARApp {
         this.hudVideo.setAttribute('webkit-playsinline', '');
         this.hudVideo.crossOrigin = 'anonymous';
         
-        // 버퍼링 최적화 설정
-        this.hudVideo.preload = 'auto';
-        this.hudVideo.autoplay = false;
-        
-        // 추가 최적화 속성
-        this.hudVideo.setAttribute('x-webkit-airplay', 'allow');
-        this.hudVideo.defaultPlaybackRate = 1.0;
-        this.hudVideo.playbackRate = 1.0;
+        // 간단한 설정 (복잡한 최적화 제거)
+        this.hudVideo.preload = 'metadata';
+        this.hudVideo.autoplay = true;
         
         this.hudVideo.src = this.currentVideoSrc;
         
@@ -542,73 +536,9 @@ class ARApp {
             this.showNotification('2번째는 음악이 나옵니다', 3000);
         }
 
-        // 재생 상태 추적
-        let isPlaying = false;
-        let playAttempts = 0;
-        const maxPlayAttempts = 3;
-
-        // 비디오 로드 시작
-        this.hudVideo.load();
-        
-        // 재생 시도 함수 (재시도 로직 포함)
-        const tryPlay = () => {
-            if (isPlaying || playAttempts >= maxPlayAttempts) return;
-            
-            playAttempts++;
-            console.log(`[AR] 비디오 재생 시도 (${playAttempts}/${maxPlayAttempts})`);
-            
-            this.hudVideo.play()
-                .then(() => {
-                    console.log('[AR] 비디오 재생 성공');
-                    isPlaying = true;
-                })
-                .catch(e => {
-                    console.warn(`[AR] 재생 실패 (시도 ${playAttempts}):`, e.message);
-                    if (playAttempts < maxPlayAttempts) {
-                        setTimeout(tryPlay, 300);
-                    }
-                });
-        };
-        
-        // loadeddata: 첫 프레임 로드 완료 시 즉시 재생
-        this.hudVideo.addEventListener('loadeddata', () => {
-            console.log('[AR] 첫 프레임 로드 완료, 즉시 재생');
-            tryPlay();
-        }, { once: true });
-        
-        // canplay: 재생 가능 상태
-        this.hudVideo.addEventListener('canplay', () => {
-            console.log('[AR] 재생 가능 상태');
-            if (!isPlaying) tryPlay();
-        }, { once: true });
-        
-        // 버퍼링 이벤트 핸들링
-        this.hudVideo.addEventListener('waiting', () => {
-            console.warn('[AR] 비디오 버퍼링 중...');
-            isPlaying = false;
-        });
-        
-        this.hudVideo.addEventListener('playing', () => {
-            console.log('[AR] 비디오 재생 중');
-            isPlaying = true;
-        });
-        
-        // 버퍼링 후 자동 재개
-        this.hudVideo.addEventListener('canplaythrough', () => {
-            console.log('[AR] 충분한 버퍼링 완료');
-            if (!isPlaying && this.hudVideo.paused) {
-                tryPlay();
-            }
-        });
-        
-        // stalled 이벤트 처리 (네트워크 문제)
-        this.hudVideo.addEventListener('stalled', () => {
-            console.warn('[AR] 네트워크 지연 감지');
-        });
-        
-        // suspend 이벤트 처리 (다운로드 일시 중단)
-        this.hudVideo.addEventListener('suspend', () => {
-            console.log('[AR] 다운로드 일시 중단');
+        // 간단한 재생 시도
+        this.hudVideo.play().catch(e => {
+            console.warn('[AR] 자동재생 실패, 사용자 제스처 필요:', e.message);
         });
 
         // VideoTexture 생성
@@ -710,12 +640,6 @@ class ARApp {
         });
 
         console.log('[AR] HUD 영상 배치됨 (크로마키 제거)');
-        
-        // 다른 영상 프리로드 (백그라운드에서)
-        const otherVideos = ['greetgang.mp4', 'singgang2.mp4'].filter(v => v !== this.currentVideoSrc);
-        otherVideos.forEach(video => {
-            setTimeout(() => this.preloadVideo(video), 2000); // 2초 후 프리로드
-        });
     }
 
     /**
@@ -928,34 +852,6 @@ class ARApp {
                 this.initVisualOdometry();
             }
         }
-    }
-
-    /**
-     * 비디오 프리로드 (백그라운드에서 미리 로드)
-     * @param {string} videoSrc - 비디오 파일 경로
-     */
-    preloadVideo(videoSrc) {
-        if (this.videoCache[videoSrc]) {
-            console.log('[AR] 비디오 이미 캐시됨:', videoSrc);
-            return;
-        }
-
-        console.log('[AR] 비디오 프리로드 시작:', videoSrc);
-        
-        const video = document.createElement('video');
-        video.preload = 'auto';
-        video.src = videoSrc;
-        video.muted = true; // 프리로드는 음소거
-        video.load();
-        
-        video.addEventListener('loadeddata', () => {
-            console.log('[AR] 비디오 프리로드 완료:', videoSrc);
-            this.videoCache[videoSrc] = video;
-        }, { once: true });
-        
-        video.addEventListener('error', (e) => {
-            console.error('[AR] 비디오 프리로드 실패:', videoSrc, e);
-        });
     }
 
     /**
