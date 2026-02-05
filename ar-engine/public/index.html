@@ -520,110 +520,134 @@
 
     <script>
         // ========================================
-        // 카카오톡 인앱 브라우저 감지 및 외부 브라우저 유도
+        // 인앱 브라우저 감지 및 외부 브라우저 유도
         // ========================================
         (function() {
-            const userAgent = navigator.userAgent.toLowerCase();
-            
-            // 카카오톡 인앱 브라우저 감지
-            const isKakaoInApp = userAgent.includes('kakaotalk');
-            
-            if (isKakaoInApp) {
-                console.log('[Kakao] 카카오톡 인앱 브라우저 감지됨');
+            var userAgent = navigator.userAgent.toLowerCase();
+            var currentUrl = window.location.href;
+
+            // 인앱 브라우저 감지 (카카오톡, 네이버, 인스타그램, 페이스북 등)
+            var isInAppBrowser = /kakaotalk|naver|instagram|fbav|fb_iab/i.test(userAgent);
+
+            if (isInAppBrowser) {
+                console.log('[Browser] 인앱 브라우저 감지됨:', userAgent);
                 
-                // 외부 브라우저로 열기 유도 페이지 표시
-                const redirectOverlay = document.createElement('div');
-                redirectOverlay.id = 'kakao-redirect-overlay';
-                redirectOverlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100vw;
-                    height: 100vh;
-                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                    z-index: 999999;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                    padding: 20px;
-                `;
-                
-                redirectOverlay.innerHTML = `
-                    <div style="text-align: center; color: #fff; max-width: 400px;">
-                        <h1 style="color: #4da6ff; font-size: 28px; margin-bottom: 20px;">강진 AR</h1>
-                        <p style="font-size: 18px; margin-bottom: 30px; line-height: 1.6;">
-                            카메라와 센서를 사용하기 위해<br>
-                            <strong>외부 브라우저</strong>에서 열어주세요
-                        </p>
-                        
-                        <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px; margin-bottom: 30px;">
-                            <p style="font-size: 16px; margin-bottom: 15px; color: #ddd;">
-                                📱 <strong>오른쪽 상단</strong> ⋮ 메뉴 터치<br>
-                                👉 <strong>"다른 브라우저로 열기"</strong> 선택
-                            </p>
-                        </div>
-                        
-                        <button id="copy-url-btn" style="
-                            padding: 15px 30px;
-                            background: linear-gradient(135deg, #4da6ff, #80c0ff);
-                            border: none;
-                            border-radius: 10px;
-                            color: #000;
-                            font-size: 16px;
-                            font-weight: bold;
-                            cursor: pointer;
-                            box-shadow: 0 4px 15px rgba(77, 166, 255, 0.4);
-                        ">
-                            📋 링크 복사하기
-                        </button>
-                        
-                        <p style="font-size: 14px; color: #888; margin-top: 20px;">
-                            링크를 복사한 후 크롬/사파리에서 열어주세요
-                        </p>
-                    </div>
-                `;
-                
-                document.body.appendChild(redirectOverlay);
-                
-                // 링크 복사 버튼
-                document.getElementById('copy-url-btn').addEventListener('click', () => {
-                    const url = window.location.href;
+                // Android 감지
+                var isAndroid = /android/i.test(userAgent);
+                // iOS 감지
+                var isIOS = /iphone|ipad|ipod/i.test(userAgent);
+
+                if (/kakaotalk/i.test(userAgent)) {
+                    // 카카오톡 전용 외부 브라우저 열기
+                    console.log('[Browser] 카카오톡 → 외부 브라우저 리다이렉트 시도');
+                    window.location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(currentUrl);
                     
-                    // 클립보드 복사
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(url).then(() => {
-                            alert('✅ 링크가 복사되었습니다!\n크롬이나 사파리에서 붙여넣기 해주세요.');
-                        }).catch(() => {
-                            // 폴백: input 사용
-                            fallbackCopy(url);
-                        });
-                    } else {
-                        fallbackCopy(url);
-                    }
-                });
-                
-                // 클립보드 복사 폴백
-                function fallbackCopy(text) {
-                    const input = document.createElement('input');
-                    input.value = text;
-                    input.style.position = 'fixed';
-                    input.style.top = '-9999px';
-                    document.body.appendChild(input);
-                    input.select();
+                    // 리다이렉트 실패 시 안내 표시
+                    setTimeout(function() {
+                        showBrowserGuide('카카오톡');
+                    }, 500);
+                } else if (isAndroid) {
+                    // Android - Chrome Intent 사용
+                    console.log('[Browser] Android 인앱 → Chrome Intent 리다이렉트');
+                    var intentUrl = 'intent://' + currentUrl.replace(/https?:\/\//, '') +
+                        '#Intent;scheme=https;package=com.android.chrome;end';
+                    window.location.href = intentUrl;
                     
-                    try {
-                        document.execCommand('copy');
-                        alert('✅ 링크가 복사되었습니다!\n크롬이나 사파리에서 붙여넣기 해주세요.');
-                    } catch (e) {
-                        alert('링크 복사 실패\n수동으로 복사해주세요:\n' + text);
-                    }
-                    
-                    document.body.removeChild(input);
+                    // 리다이렉트 실패 시 안내 표시
+                    setTimeout(function() {
+                        showBrowserGuide('Android');
+                    }, 500);
+                } else if (isIOS) {
+                    // iOS - Safari로 열기 시도 (직접 호출 제한적이므로 안내 표시)
+                    console.log('[Browser] iOS 인앱 → 안내 메시지 표시');
+                    showBrowserGuide('iOS');
+                }
+            }
+
+            // 안내 모달 표시 함수
+            function showBrowserGuide(platform) {
+                // 기존 안내가 있으면 제거
+                var existing = document.getElementById('browserGuide');
+                if (existing) {
+                    existing.remove();
                 }
                 
-                // 나머지 페이지 로드 중단
-                return;
+                var guideHtml =
+                    '<div id="browserGuide" style="' +
+                    'position: fixed; top: 0; left: 0; right: 0; bottom: 0; ' +
+                    'background: rgba(0,0,0,0.95); z-index: 999999; ' +
+                    'display: flex; align-items: center; justify-content: center; ' +
+                    'padding: 20px;">' +
+                    '<div style="' +
+                    'background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); ' +
+                    'padding: 40px 30px; border-radius: 16px; ' +
+                    'max-width: 400px; text-align: center; ' +
+                    'box-shadow: 0 8px 32px rgba(0,0,0,0.5);">' +
+                    '<h3 style="margin-bottom: 20px; font-size: 24px; color: #4da6ff; font-weight: bold;">강진 AR</h3>' +
+                    '<p style="color: #ddd; font-size: 16px; line-height: 1.8; margin-bottom: 30px;">' +
+                    '카메라와 센서를 사용하기 위해<br>' +
+                    '<strong style="color: #fff;">외부 브라우저</strong>에서 열어주세요.<br><br>' +
+                    '<span style="color: #aaa; font-size: 14px;">⚠️ 인앱 브라우저에서는<br>AR 기능이 제한됩니다.</span>' +
+                    '</p>' +
+                    '<div style="background: rgba(77, 166, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid rgba(77, 166, 255, 0.3);">' +
+                    '<p style="color: #fff; font-size: 15px; line-height: 1.6;">' +
+                    '📱 <strong>우측 하단</strong> <span style="font-size: 20px;">⋮</span> 메뉴 터치<br>' +
+                    '👉 <strong>"다른 브라우저로 열기"</strong> 선택<br>' +
+                    '<span style="font-size: 13px; color: #aaa;">(Safari 또는 Chrome)</span>' +
+                    '</p>' +
+                    '</div>' +
+                    '<button onclick="copyUrlToClipboard()" id="copy-url-guide-btn" ' +
+                    'style="background: linear-gradient(135deg, #4da6ff, #80c0ff); color: #000; border: none; ' +
+                    'padding: 15px 30px; border-radius: 10px; cursor: pointer; font-size: 16px; ' +
+                    'font-weight: bold; margin-bottom: 15px; width: 100%; ' +
+                    'box-shadow: 0 4px 15px rgba(77, 166, 255, 0.4);">' +
+                    '📋 링크 복사하기' +
+                    '</button>' +
+                    '<button onclick="document.getElementById(\'browserGuide\').style.display=\'none\'" ' +
+                    'style="background: transparent; color: #888; border: 1px solid #444; ' +
+                    'padding: 12px 30px; border-radius: 10px; cursor: pointer; font-size: 14px; width: 100%;">' +
+                    '닫기' +
+                    '</button>' +
+                    '</div>' +
+                    '</div>';
+                    
+                document.body.insertAdjacentHTML('beforeend', guideHtml);
+            }
+
+            // 클립보드 복사 함수 (전역)
+            window.copyUrlToClipboard = function() {
+                var url = window.location.href;
+                
+                // 클립보드 복사
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(url).then(function() {
+                        alert('✅ 링크가 복사되었습니다!\n\nSafari 또는 Chrome에서\n붙여넣기 해주세요.');
+                    }).catch(function() {
+                        fallbackCopy(url);
+                    });
+                } else {
+                    fallbackCopy(url);
+                }
+            };
+
+            // 클립보드 복사 폴백
+            function fallbackCopy(text) {
+                var input = document.createElement('input');
+                input.value = text;
+                input.style.position = 'fixed';
+                input.style.top = '-9999px';
+                document.body.appendChild(input);
+                input.select();
+                input.setSelectionRange(0, 99999); // 모바일 대응
+                
+                try {
+                    document.execCommand('copy');
+                    alert('✅ 링크가 복사되었습니다!\n\nSafari 또는 Chrome에서\n붙여넣기 해주세요.');
+                } catch (e) {
+                    alert('링크 복사 실패\n\n수동으로 복사해주세요:\n' + text);
+                }
+                
+                document.body.removeChild(input);
             }
         })();
 
