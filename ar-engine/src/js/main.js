@@ -522,11 +522,7 @@ class ARApp {
         this.hudVideo.setAttribute('playsinline', '');
         this.hudVideo.setAttribute('webkit-playsinline', '');
         this.hudVideo.crossOrigin = 'anonymous';
-        
-        // 간단한 설정 (복잡한 최적화 제거)
-        this.hudVideo.preload = 'metadata';
-        this.hudVideo.autoplay = true;
-        
+        this.hudVideo.preload = 'auto';
         this.hudVideo.src = this.currentVideoSrc;
         
         // 사운드가 있는 영상의 경우 볼륨 설정 및 안내창 표시
@@ -536,10 +532,15 @@ class ARApp {
             this.showNotification('2번째는 음악이 나옵니다', 3000);
         }
 
-        // 간단한 재생 시도
-        this.hudVideo.play().catch(e => {
-            console.warn('[AR] 자동재생 실패, 사용자 제스처 필요:', e.message);
-        });
+        // 비디오 로드 및 재생
+        this.hudVideo.load();
+        
+        this.hudVideo.addEventListener('loadeddata', () => {
+            console.log('[AR] 비디오 로드 완료, 재생 시작');
+            this.hudVideo.play().catch(e => {
+                console.warn('[AR] 자동재생 실패:', e.message);
+            });
+        }, { once: true });
 
         // VideoTexture 생성
         this.hudVideoTexture = new THREE.VideoTexture(this.hudVideo);
