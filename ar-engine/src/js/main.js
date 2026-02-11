@@ -602,7 +602,7 @@ class ARApp {
         });
 
         // 평면 지오메트리 (기본 1:1 비율, 영상 로드 후 조정)
-        const geometry = new THREE.PlaneGeometry(0.5, 0.5);
+        const geometry = new THREE.PlaneGeometry(1.0, 1.0);
         this.hudCube = new THREE.Mesh(geometry, material);
         
         // 2번 영상(singgang2.mp4)은 상단/하단 검은 줄 크롭
@@ -633,7 +633,7 @@ class ARApp {
                 console.log('[AR] 2번 영상 비율 보정:', aspect);
             }
             
-            const height = 0.5;
+            const height = 1.0;
             const width = height * aspect;
             this.hudCube.geometry.dispose();
             this.hudCube.geometry = new THREE.PlaneGeometry(width, height);
